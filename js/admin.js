@@ -55,7 +55,7 @@
         { k: 'participants', label: '参加者', type: 'text', hint: '例: 三研究室合同' },
         { k: 'summary', label: '一覧に表示する概要（1〜2行）', type: 'textarea' },
         { k: 'body', label: 'レポート本文', type: 'textarea', tall: true, hint: '空行で段落が分かれます' },
-        { k: 'images', label: '写真のURL（1行に1つ）', type: 'lines', hint: '例: images/akiba01.jpg（サイトに置いた画像のパス）' }
+        { k: 'images', label: '写真', type: 'photos' }
       ],
       title: function (x) { return x.title || '（無題）'; }, sub: function (x) { return U.fmtDate(x.date); },
       blank: function () { return { id: 'new', date: today(), title: '', place: '', participants: '', summary: '', body: '', images: [] }; },
@@ -253,12 +253,16 @@
 
     if (!item) return;
     var f = panel.querySelector('#editForm');
+    var photos = null;
+    if (panel.querySelector('#phBox')) photos = photoManager(panel.querySelector('#phBox'), item.images || [], f);
     f.addEventListener('input', function () { setDirty(true); });
     f.addEventListener('submit', function (ev) {
       ev.preventDefault();
       if (!f.reportValidity()) return;
       var next = Object.assign({}, item);
+      if (photos && photos.uploading()) { toast('写真のアップロード中です。終わるまでお待ちください', true); return; }
       S.fields.forEach(function (fd) {
+        if (fd.type === 'photos') { next[fd.k] = photos.list(); return; }
         var v = f.elements[fd.k].value;
         next[fd.k] = fd.type === 'lines' ? v.split('\n').map(function (s) { return s.trim(); }).filter(Boolean) : v.trim();
       });
@@ -275,6 +279,7 @@
         if (isNew) { arr.push(saved); delete state.draft[key]; state.sel[key] = saved.id; }
         else arr[arr.indexOf(item)] = saved;
         renderList(panel, key);
+        if (key === 'events') loadUsage();
       });
     });
     panel.querySelector('#delBtn').addEventListener('click', function () {
@@ -282,14 +287,159 @@
       if (!confirm('「' + S.title(item) + '」を削除しますか？\n公開ページからもすぐに消えます。')) return;
       busy(null, api('DELETE', key + '/' + encodeURIComponent(item.id)), '削除しました').then(function () {
         D[key] = arr.filter(function (x) { return x !== item; }); delete state.sel[key]; setDirty(false); renderList(panel, key);
+        if (key === 'events') loadUsage();
       });
     });
+  }
+
+  /* =======================================================
+     写真
+     ======================================================= */
+  var PHOTO_MAX_SIDE = 1600;     // 長辺のピクセル数
+  var PHOTO_MAX_COUNT = 50;      // 1レポートあたりの上限
+  var PHOTO_LIMIT_BYTES = 1900000;
+
+  function mb(n) { return (n / 1e6).toFixed(n < 1e7 ? 1 : 0); }
+
+  /* 使用量を取得して、画面の .usage 要素をすべて更新 */
+  function loadUsage() {
+    api('GET', 'usage').then(function (u) { state.usage = u; paintUsage(); }).catch(function () {});
+  }
+  function usageHtml() {
+    var u = state.usage;
+    if (!u) return '<span class="hint">使用量を確認中…</span>';
+    var used = u.dbBytes != null ? u.dbBytes : u.photoBytes, pct = Math.min(100, used / u.limit * 100);
+    return '<div class="meter' + (pct >= 80 ? ' warn' : '') + '" role="img" aria-label="データベース使用量 ' + pct.toFixed(0) + '%"><span style="width:' + Math.max(pct, 0.5).toFixed(1) + '%"></span></div>' +
+      '<span class="hint">データベース使用量 <strong>' + mb(used) + 'MB</strong> / ' + mb(u.limit) + 'MB（写真 ' + u.photoCount + '枚）' +
+      (pct >= 80 ? ' ⚠ 残りが少なくなっています' : '') + '</span>';
+  }
+  function paintUsage() { document.querySelectorAll('.usage').forEach(function (el) { el.innerHTML = usageHtml(); }); }
+
+  /* 画像を読み込む（スマホ写真の向きも正しく扱う） */
+  function loadImage(file) {
+    function viaImg() {
+      return new Promise(function (ok, ng) {
+        var url = URL.createObjectURL(file), img = new Image();
+        img.onload = function () { ok(img); setTimeout(function () { URL.revokeObjectURL(url); }, 1000); };
+        img.onerror = function () { URL.revokeObjectURL(url); ng(new Error('この画像は読み込めません（JPEG / PNG / WebP を選んでください）')); };
+        img.src = url;
+      });
+    }
+    if (window.createImageBitmap) return createImageBitmap(file, { imageOrientation: 'from-image' }).catch(viaImg);
+    return viaImg();
+  }
+  function toBlob(canvas, type, q) {
+    return new Promise(function (ok) { canvas.toBlob(function (b) { ok(b); }, type, q); });
+  }
+  /* 長辺 1600px に縮小して圧縮（WebP、非対応のブラウザは JPEG）。位置情報などの撮影データもここで消える */
+  function shrink(file) {
+    return loadImage(file).then(function (src) {
+      var w0 = src.naturalWidth || src.width, h0 = src.naturalHeight || src.height;
+      function attempt(side, q) {
+        var r = Math.min(1, side / Math.max(w0, h0)), w = Math.round(w0 * r), h = Math.round(h0 * r);
+        var c = document.createElement('canvas'); c.width = w; c.height = h;
+        var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(src, 0, 0, w, h);
+        return toBlob(c, 'image/webp', q).then(function (b) { return b && b.type === 'image/webp' ? b : toBlob(c, 'image/jpeg', q + 0.03); })
+          .then(function (b) {
+            if (!b) throw new Error('画像の変換に失敗しました');
+            if (b.size > PHOTO_LIMIT_BYTES && side > 800) return attempt(Math.round(side * 0.8), Math.max(0.6, q - 0.1));
+            return { blob: b, w: w, h: h };
+          });
+      }
+      return attempt(PHOTO_MAX_SIDE, 0.82);
+    });
+  }
+  function upload(shrunk) {
+    return fetch('/api/admin/photos', {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': shrunk.blob.type, 'X-Lab-Admin': '1', 'X-Width': String(shrunk.w), 'X-Height': String(shrunk.h) },
+      body: shrunk.blob
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (r.status === 401) throw new Error('ログインの有効期限が切れました。ページを再読み込みしてください。');
+        if (!r.ok || j.ok === false) throw new Error(j.error || ('アップロードに失敗しました（' + r.status + '）'));
+        return j;
+      });
+    });
+  }
+
+  /* イベントの編集フォーム内の写真欄 */
+  function photoManager(box, initial, form) {
+    var list = initial.slice(), pending = 0, done = 0, total = 0;
+
+    function paint() {
+      box.innerHTML =
+        '<ul class="ph-grid" aria-label="写真の一覧">' + list.map(function (u, i) {
+          return '<li><img src="' + esc(u) + '" alt="写真 ' + (i + 1) + '" loading="lazy">' +
+            (i === 0 ? '<span class="ph-cover">表紙</span>' : '') +
+            '<div class="ph-ops">' +
+            '<button type="button" data-op="-1" data-i="' + i + '" aria-label="写真 ' + (i + 1) + ' を前へ"' + (i === 0 ? ' disabled' : '') + '>◀</button>' +
+            '<button type="button" data-op="x" data-i="' + i + '" aria-label="写真 ' + (i + 1) + ' を外す">✕</button>' +
+            '<button type="button" data-op="1" data-i="' + i + '" aria-label="写真 ' + (i + 1) + ' を後ろへ"' + (i === list.length - 1 ? ' disabled' : '') + '>▶</button>' +
+            '</div></li>';
+        }).join('') +
+        (pending ? '<li class="ph-wait" aria-hidden="true"><span>処理中…</span></li>' : '') + '</ul>' +
+        '<div class="ph-actions">' +
+        '<label class="btn' + (list.length >= PHOTO_MAX_COUNT ? ' is-disabled' : '') + '">📷 写真を追加<input type="file" accept="image/*" multiple hidden' + (list.length >= PHOTO_MAX_COUNT ? ' disabled' : '') + '></label>' +
+        '<span class="hint" role="status" aria-live="polite">' + (pending ? 'アップロード中… ' + done + ' / ' + total + '枚' : (list.length ? list.length + '枚 / 最大' + PHOTO_MAX_COUNT + '枚' : 'まだ写真がありません')) + '</span>' +
+        '</div>' +
+        '<p class="hint">複数枚まとめて選べます' + (window.matchMedia('(hover: hover)').matches ? '（この枠にドラッグ＆ドロップも可）' : '') + '。自動で縮小され、撮影場所などの情報は消えます。1枚目が一覧の「表紙」になります。</p>' +
+        '<div class="usage">' + usageHtml() + '</div>';
+    }
+
+    function addFiles(files) {
+      files = Array.prototype.filter.call(files, function (f) { return /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name); });
+      if (!files.length) return;
+      var room = PHOTO_MAX_COUNT - list.length - pending;
+      if (files.length > room) { toast('1つのレポートに入れられる写真は ' + PHOTO_MAX_COUNT + ' 枚までです', true); files = files.slice(0, Math.max(0, room)); }
+      if (!files.length) return;
+      if (!pending) { done = 0; total = 0; }
+      total += files.length; pending += files.length; paint();
+      var errors = [], chain = Promise.resolve();
+      files.forEach(function (file) {
+        chain = chain.then(function () {
+          return shrink(file).then(upload).then(function (r) { list.push(r.url); setDirty(true); })
+            .catch(function (e) { errors.push(file.name + '：' + e.message); })
+            .then(function () { pending--; done++; paint(); });
+        });
+      });
+      chain.then(function () {
+        loadUsage();
+        if (errors.length) toast(errors.join(' ／ '), true);
+        else toast(files.length + '枚追加しました。「保存して公開」で反映されます');
+      });
+    }
+
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-op]'); if (!b) return;
+      var i = +b.dataset.i;
+      if (b.dataset.op === 'x') {
+        if (!confirm('写真 ' + (i + 1) + ' をこのレポートから外しますか？\n（「保存して公開」を押すと削除されます）')) return;
+        list.splice(i, 1);
+      } else {
+        var j = i + (+b.dataset.op), t = list[i]; list[i] = list[j]; list[j] = t;
+      }
+      setDirty(true); paint();
+      var again = box.querySelector('button[data-op="' + b.dataset.op + '"][data-i="' + Math.min(b.dataset.op === 'x' ? i : i + (+b.dataset.op), list.length - 1) + '"]');
+      if (again && !again.disabled) again.focus();
+    });
+    box.addEventListener('change', function (e) {
+      if (e.target.type === 'file') { addFiles(e.target.files); e.target.value = ''; }
+    });
+    ['dragenter', 'dragover'].forEach(function (t) { box.addEventListener(t, function (e) { e.preventDefault(); box.classList.add('drag'); }); });
+    ['dragleave', 'drop'].forEach(function (t) { box.addEventListener(t, function (e) { e.preventDefault(); box.classList.remove('drag'); }); });
+    box.addEventListener('drop', function (e) { if (e.dataTransfer) addFiles(e.dataTransfer.files); });
+
+    paint();
+    if (!state.usage) loadUsage();
+    return { list: function () { return list.slice(); }, uploading: function () { return pending > 0; } };
   }
 
   function formHtml(S, item, isNew) {
     return '<form class="form" id="editForm">' +
       '<h2 class="sub-h" style="margin-top:0">' + S.icon + ' ' + esc(S.label) + (isNew ? 'を追加' : 'を編集') + '</h2>' +
       S.fields.map(function (fd) {
+        if (fd.type === 'photos') return '<div class="field"><span class="flabel">' + esc(fd.label) + '</span><div class="ph-box" id="phBox"></div></div>';
         var v = item[fd.k]; if (fd.type === 'lines') v = (v || []).join('\n');
         var req = fd.req ? ' required' : '';
         var input = (fd.type === 'textarea' || fd.type === 'lines')
@@ -340,7 +490,10 @@
       '<button class="btn primary" type="button" id="expJson">⬇ バックアップを保存（JSON）</button>' +
       '<label class="btn">⬆ バックアップから復元<input type="file" id="impJson" accept="application/json,.json" hidden></label>' +
       '</div>' +
-      '<p class="notice">⚠ 復元すると、今公開中の内容はすべてバックアップの内容に置き換わります。</p>';
+      '<p class="notice">⚠ 復元すると、今公開中の内容はすべてバックアップの内容に置き換わります。<br>写真のファイルそのものはバックアップに含まれません（データベースに残っている写真は、復元後もそのまま表示されます）。</p>' +
+      '<h2 class="sub-h">📊 使用量</h2><div class="usage" style="max-width:520px">' + usageHtml() + '</div>' +
+      '<p class="hint">Cloudflare D1 の無料プランは 1データベース 500MB までです。写真1枚あたりおよそ 0.2〜0.4MB です。</p>';
+    loadUsage();
 
     panel.querySelector('#expJson').addEventListener('click', function () {
       var out = { site: D.site, news: D.news, research: D.research, events: D.events, links: D.links };

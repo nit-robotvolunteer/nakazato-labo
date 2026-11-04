@@ -81,13 +81,62 @@
 
   function eventRows(list) {
     if (!list.length) return '<p>レポートはまだありません。</p>';
+    /* 1件でも写真があれば、全行にサムネイル枠を用意して列をそろえる */
+    var anyThumb = list.some(function (e) { return U.safeUrl((e.images || [])[0]); });
     return '<ul class="ev-list">' + list.map(function (e) {
-      return '<li><a class="ev-item" href="/report?id=' + encodeURIComponent(e.id) + '">' +
+      var cover = U.safeUrl((e.images || [])[0]);
+      return '<li><a class="ev-item' + (anyThumb ? ' has-thumb' : '') + '" href="/report?id=' + encodeURIComponent(e.id) + '">' +
+        (cover ? '<img class="ev-thumb" src="' + esc(cover) + '" alt="" loading="lazy">' : anyThumb ? '<span class="ev-thumb ev-nothumb" aria-hidden="true">📷</span>' : '') +
         '<span class="ev-date"><time datetime="' + esc(e.date) + '">' + U.fmtDate(e.date) + '</time></span>' +
         '<span class="ev-main"><span class="ev-title">' + esc(e.title) + '</span>' + newBadge(e.date) +
         (e.summary ? '<span class="ev-sum">' + esc(e.summary) + '</span>' : '') + '</span>' +
         '<span class="ev-go" aria-hidden="true">›</span></a></li>';
     }).join('') + '</ul>';
+  }
+
+  /* ---------- 写真ビューア（拡大表示・前後移動・スワイプ・キーボード操作） ---------- */
+  function viewer(imgs, title) {
+    var dlg = document.createElement('dialog');
+    dlg.className = 'lb';
+    dlg.setAttribute('aria-label', title + ' の写真');
+    dlg.innerHTML =
+      '<figure><img alt=""><figcaption></figcaption></figure>' +
+      '<button type="button" class="lb-btn lb-close" aria-label="閉じる">✕</button>' +
+      '<button type="button" class="lb-btn lb-prev" aria-label="前の写真">‹</button>' +
+      '<button type="button" class="lb-btn lb-next" aria-label="次の写真">›</button>';
+    document.body.appendChild(dlg);
+    var img = dlg.querySelector('img'), cap = dlg.querySelector('figcaption'), cur = 0, opener = null;
+
+    function show(k) {
+      cur = (k + imgs.length) % imgs.length;
+      img.src = imgs[cur]; img.alt = title + ' の写真 ' + (cur + 1);
+      cap.textContent = (cur + 1) + ' / ' + imgs.length;
+      dlg.querySelector('.lb-prev').hidden = dlg.querySelector('.lb-next').hidden = imgs.length < 2;
+      if (imgs.length > 1) { var pre = new Image(); pre.src = imgs[(cur + 1) % imgs.length]; }
+    }
+    function open(k, from) {
+      if (typeof dlg.showModal !== 'function') { window.open(imgs[k], '_blank', 'noopener'); return; }
+      opener = from; show(k); dlg.showModal(); document.documentElement.classList.add('lb-open');
+    }
+    dlg.addEventListener('close', function () { document.documentElement.classList.remove('lb-open'); if (opener) opener.focus(); });
+    dlg.querySelector('.lb-close').addEventListener('click', function () { dlg.close(); });
+    dlg.querySelector('.lb-prev').addEventListener('click', function () { show(cur - 1); });
+    dlg.querySelector('.lb-next').addEventListener('click', function () { show(cur + 1); });
+    dlg.addEventListener('click', function (e) { if (e.target === dlg || e.target.tagName === 'FIGURE') dlg.close(); });
+    dlg.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); show(cur - 1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); show(cur + 1); }
+    });
+    var x0 = null;
+    dlg.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+    dlg.addEventListener('touchend', function (e) {
+      if (x0 == null) return;
+      var dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (Math.abs(dx) > 50) show(cur + (dx < 0 ? 1 : -1));
+    });
+    document.querySelectorAll('.gallery a[data-k]').forEach(function (a) {
+      a.addEventListener('click', function (e) { e.preventDefault(); open(+a.dataset.k, a); });
+    });
   }
 
   /* ---------- ページ ---------- */
@@ -155,7 +204,7 @@
         (e.participants ? '<div><dt>参加</dt><dd>' + esc(e.participants) + '</dd></div>' : '') + '</dl>';
       var imgs = (e.images || []).map(function (u) { return U.safeUrl(u); }).filter(Boolean);
       var gallery = imgs.length
-        ? '<h3 class="sub-h">写真</h3><ul class="gallery">' + imgs.map(function (u, k) { return '<li><a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" alt="' + esc(e.title) + ' の写真 ' + (k + 1) + '" loading="lazy"></a></li>'; }).join('') + '</ul>'
+        ? '<h3 class="sub-h">写真 <span class="ph-count">' + imgs.length + '枚</span></h3><ul class="gallery">' + imgs.map(function (u, k) { return '<li><a href="' + esc(u) + '" data-k="' + k + '" aria-label="写真 ' + (k + 1) + ' を拡大"><img src="' + esc(u) + '" alt="' + esc(e.title) + ' の写真 ' + (k + 1) + '" loading="lazy"></a></li>'; }).join('') + '</ul>'
         : '';
       var pager = '<nav class="pager" aria-label="前後のレポート">' +
         (prev ? '<a class="btn" href="/report?id=' + encodeURIComponent(prev.id) + '" rel="prev">‹ 前のレポート<span class="pg-t">' + esc(prev.title) + '</span></a>' : '<span></span>') +
@@ -165,6 +214,7 @@
       var c = pageHead(e.title, '', crumbs.concat({ label: e.title })) +
         '<article class="win report">' + '<div class="win-body">' + meta + '<div class="rep-body">' + U.paras(e.body) + '</div>' + gallery + '</div></article>' + pager;
       layout(c, e.title);
+      if (imgs.length) viewer(imgs, e.title);
     },
 
     links: function () {

@@ -17,7 +17,31 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, date TEXT NOT NULL, title TEXT NOT NULL, place TEXT NOT NULL DEFAULT '', participants TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', images TEXT NOT NULL DEFAULT '[]')`,
   `CREATE TABLE IF NOT EXISTS research (id TEXT PRIMARY KEY, sort INTEGER NOT NULL DEFAULT 0, icon TEXT NOT NULL DEFAULT '', title TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '')`,
   `CREATE TABLE IF NOT EXISTS links (id TEXT PRIMARY KEY, sort INTEGER NOT NULL DEFAULT 0, title TEXT NOT NULL, url TEXT NOT NULL, "desc" TEXT NOT NULL DEFAULT '')`,
+  /* 写真本体（BLOB）。公開URLは /photo/{id} */
+  `CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, mime TEXT NOT NULL, width INTEGER NOT NULL DEFAULT 0, height INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL, created TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, data BLOB NOT NULL)`,
 ];
+
+/* ---------- 写真 ---------- */
+export const PHOTO_MAX_BYTES = 1_900_000;      // D1 の1行上限（2MB）に余裕を持たせる
+export const DB_LIMIT_BYTES = 500_000_000;     // D1 無料プランの1データベース上限（500MB）
+export const PHOTO_ID_RE = /^[a-f0-9]{16}$/;
+export const PHOTO_TYPES = {
+  'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/png': (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
+  'image/webp': (b) => b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50,
+};
+
+/* どのレポートからも使われていない写真を消す。
+   - 一度レポートに使われた写真（used=1）は、外された時点で削除
+   - アップロード直後でまだ保存していない写真は、1日たつまで残す（編集中に消えないように） */
+const PHOTO_REFS = `SELECT substr(j.value, 8) FROM events, json_each(events.images) AS j WHERE j.value LIKE '/photo/%'`;
+export function photoCleanupStmts(db) {
+  const cutoff = new Date(Date.now() - 864e5).toISOString();
+  return [
+    db.prepare(`UPDATE photos SET used = 1 WHERE used = 0 AND id IN (${PHOTO_REFS})`),
+    db.prepare(`DELETE FROM photos WHERE id NOT IN (${PHOTO_REFS}) AND (used = 1 OR created < ?)`).bind(cutoff),
+  ];
+}
 
 const SITE_KEYS = ['title', 'subtitle', 'university', 'professor', 'welcome', 'owner', 'since'];
 

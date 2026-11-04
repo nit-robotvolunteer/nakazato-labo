@@ -334,3 +334,63 @@ table.prof { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
 @media (max-width: 720px) { .hint-wide { display: none; } .hint-narrow { display: inline; } }
 .toast.err { background: #b42318; }
 .btn:disabled { opacity: .55; cursor: wait; }
+
+/* =========================================================
+   写真
+   ========================================================= */
+/* イベント一覧の表紙サムネイル */
+.ev-item.has-thumb { grid-template-columns: 96px 7.2em 1fr auto; }
+.ev-thumb { width: 96px; height: 72px; object-fit: cover; display: block; border: 3px solid #fff; outline: 1px solid var(--lo); background: #eef2f8; }
+@media (max-width: 720px) {
+  .ev-item.has-thumb { grid-template-columns: 80px 1fr auto; }
+  .ev-item.has-thumb .ev-thumb { grid-column: 1; grid-row: 1 / span 2; width: 80px; height: 60px; }
+  .ev-item.has-thumb .ev-date, .ev-item.has-thumb .ev-main { grid-column: 2; }
+  .ev-item.has-thumb .ev-go { grid-column: 3; }
+}
+
+/* レポートの写真 */
+.ph-count { font-size: 13px; font-weight: 400; color: var(--ink-soft); }
+.gallery a { display: block; cursor: zoom-in; }
+.gallery a:hover img { outline-color: var(--accent); }
+
+/* 拡大表示 */
+.lb { width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: rgba(10, 16, 32, .94); color: #fff; }
+.lb::backdrop { background: rgba(10, 16, 32, .94); }
+.lb figure { margin: 0; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 56px 64px 16px; }
+.lb img { max-width: 100%; max-height: calc(100% - 36px); object-fit: contain; border: 4px solid #fff; background: #fff; }
+.lb figcaption { margin-top: 10px; font: 700 14px var(--mono); letter-spacing: .08em; }
+.lb-btn { position: absolute; border: 1px solid rgba(255,255,255,.5); background: rgba(255,255,255,.12); color: #fff; cursor: pointer; font: 700 28px/1 var(--font); width: 48px; height: 48px; border-radius: 2px; }
+.lb-btn:hover { background: rgba(255,255,255,.28); }
+.lb-close { top: 12px; right: 12px; font-size: 20px; }
+.lb-prev { left: 10px; top: 50%; transform: translateY(-50%); }
+.lb-next { right: 10px; top: 50%; transform: translateY(-50%); }
+.lb-btn[hidden] { display: none; }
+html.lb-open { overflow: hidden; }
+@media (max-width: 720px) {
+  .lb figure { padding: 60px 8px 12px; }
+  .lb-prev, .lb-next { top: auto; bottom: 14px; transform: none; }
+}
+
+/* 管理ページの写真欄 */
+.field { display: grid; gap: 6px; }
+.flabel { font-weight: 700; font-size: 14px; }
+.ph-box { border: 1px dashed var(--lo); background: #f8fafd; padding: 12px; display: grid; gap: 10px; }
+.ph-box.drag { border-color: var(--navy2); background: #eaf1ff; }
+.ph-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.ph-grid:empty { display: none; }
+.ph-grid li { position: relative; background: #fff; border: 1px solid var(--lo); }
+.ph-grid img { display: block; width: 100%; aspect-ratio: 4/3; object-fit: cover; }
+.ph-cover { position: absolute; top: 4px; left: 4px; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; padding: 0 6px; }
+.ph-ops { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
+.ph-ops button { min-height: 36px; border: 0; background: #fff; cursor: pointer; font-size: 13px; color: var(--ink); }
+.ph-ops button + button { border-left: 1px solid var(--line); }
+.ph-ops button:hover:not(:disabled) { background: var(--mark); }
+.ph-ops button[data-op="x"]:hover { background: #ffe1e1; color: #b42318; }
+.ph-ops button:disabled { opacity: .3; cursor: default; }
+.ph-wait { display: grid; place-items: center; aspect-ratio: 4/3; color: var(--ink-soft); font-size: 13px; background: repeating-linear-gradient(45deg, #f3f6fb 0 8px, #e9eef7 8px 16px) !important; }
+.ph-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.btn.is-disabled { opacity: .5; pointer-events: none; }
+.meter { height: 10px; background: #e6ebf3; border: 1px solid var(--lo); margin-bottom: 4px; overflow: hidden; }
+.meter span { display: block; height: 100%; background: linear-gradient(90deg, var(--navy2), var(--navy)); }
+.meter.warn span { background: linear-gradient(90deg, #f59e0b, #d97706); }
+.ev-nothumb { display: grid !important; place-items: center; font-size: 22px; opacity: .55; background: repeating-linear-gradient(45deg, #f3f6fb 0 6px, #e9eef7 6px 12px); }

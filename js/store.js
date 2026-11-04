@@ -36,6 +36,7 @@
     byDateDesc: function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; },
     safeUrl: function (u) {
       u = String(u || '').trim();
+      if (/^\/\//.test(u)) return '';
       if (/^(https?:\/\/|mailto:|\.?\/|#|[\w\-]+(\.html)?([?#]|$))/i.test(u)) return u;
       return '';
     },

@@ -6,9 +6,18 @@
      DELETE /api/admin/{種類}/{id}       … 1件を削除
      PUT    /api/admin/order/{種類}      … 並び順を保存 { ids: [...] }
      POST   /api/admin/import            … 全データを置き換え（初期登録・バックアップ復元）
+     POST   /api/admin/photos            … 写真をアップロード（本文は画像データそのもの）
+     GET    /api/admin/usage             … データベースの使用量
    {種類} = news / events / research / links
    ========================================================= */
-import { TABLES, HttpError, getDB, ensureSchema, readAll, json, handleError, checkId, cleanItem, cleanSite, upsertStmt, siteStmt } from '../../_lib/db.js';
+import { TABLES, HttpError, getDB, ensureSchema, readAll, json, handleError, checkId, cleanItem, cleanSite, upsertStmt, siteStmt,
+  PHOTO_TYPES, PHOTO_MAX_BYTES, DB_LIMIT_BYTES, photoCleanupStmts } from '../../_lib/db.js';
+
+function photoId() {
+  const b = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+}
+function dim(v) { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 && n < 20000 ? n : 0; }
 
 async function body(request) {
   try { return await request.json(); } catch { throw new HttpError(400, 'データの形式が不正です'); }
@@ -32,6 +41,27 @@ export async function onRequest({ request, env, params }) {
 
     if (m === 'GET' && p[0] === 'data' && p.length === 1) return json(await readAll(db));
 
+    if (m === 'GET' && p[0] === 'usage' && p.length === 1) {
+      const r = await db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(bytes), 0) AS b FROM photos').all();
+      const row = (r.results && r.results[0]) || { n: 0, b: 0 };
+      const size = r.meta && Number.isFinite(r.meta.size_after) ? r.meta.size_after : null;
+      return json({ ok: true, photoCount: row.n, photoBytes: row.b, dbBytes: size, limit: DB_LIMIT_BYTES });
+    }
+
+    if (m === 'POST' && p[0] === 'photos' && p.length === 1) {
+      const mime = (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+      if (!PHOTO_TYPES[mime]) throw new HttpError(400, '対応していない画像形式です（JPEG / PNG / WebP）');
+      const ab = await request.arrayBuffer();
+      const bytes = new Uint8Array(ab);
+      if (!bytes.length) throw new HttpError(400, '画像データがありません');
+      if (bytes.length > PHOTO_MAX_BYTES) throw new HttpError(413, '画像が大きすぎます（1枚 1.9MB まで）');
+      if (!PHOTO_TYPES[mime](bytes)) throw new HttpError(400, '画像データが壊れているか、形式が違います');
+      const id = photoId();
+      await db.prepare('INSERT INTO photos (id, mime, width, height, bytes, created, used, data) VALUES (?, ?, ?, ?, ?, ?, 0, ?)')
+        .bind(id, mime, dim(request.headers.get('X-Width')), dim(request.headers.get('X-Height')), bytes.length, new Date().toISOString(), ab).run();
+      return json({ ok: true, id, url: '/photo/' + id, bytes: bytes.length });
+    }
+
     if (m === 'PUT' && p[0] === 'site' && p.length === 1) {
       const site = cleanSite(await body(request));
       await siteStmt(db, site).run();
@@ -48,6 +78,7 @@ export async function onRequest({ request, env, params }) {
           stmts.push(upsertStmt(db, col, checkId(x.id), item));
         });
       }
+      stmts.push(...photoCleanupStmts(db));
       await db.batch(stmts); // batch はまとめて成功 or まとめて失敗
       return json({ ok: true, data: await readAll(db) });
     }
@@ -66,11 +97,11 @@ export async function onRequest({ request, env, params }) {
       const id = checkId(rawId);
       if (m === 'PUT') {
         const item = cleanItem(col, await body(request));
-        await upsertStmt(db, col, id, item).run();
+        await db.batch([upsertStmt(db, col, id, item), ...(col === 'events' ? photoCleanupStmts(db) : [])]);
         return json({ ok: true, item: { id, ...item } });
       }
       if (m === 'DELETE') {
-        await db.prepare(`DELETE FROM ${col} WHERE id = ?`).bind(id).run();
+        await db.batch([db.prepare(`DELETE FROM ${col} WHERE id = ?`).bind(id), ...(col === 'events' ? photoCleanupStmts(db) : [])]);
         return json({ ok: true });
       }
     }
