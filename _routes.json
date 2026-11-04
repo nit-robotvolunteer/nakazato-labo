@@ -1,5 +1,0 @@
-{
-  "version": 1,
-  "include": ["/admin", "/admin.html", "/admin/*", "/js/admin.js", "/api/*"],
-  "exclude": []
-}
