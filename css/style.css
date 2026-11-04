@@ -331,5 +331,6 @@ table.prof { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
 .admin-note { position: sticky; top: 0; z-index: 20; margin: 0; padding: 8px 18px; font-size: 13.5px; font-weight: 700; color: #7a4b00; background: #fff4c2; border-bottom: 1px solid #e0b800; }
 .admin-note[hidden] { display: none; }
 .hint-narrow { display: none; }
+@media (max-width: 720px) { .hint-wide { display: none; } .hint-narrow { display: inline; } }
 .toast.err { background: #b42318; }
 .btn:disabled { opacity: .55; cursor: wait; }
