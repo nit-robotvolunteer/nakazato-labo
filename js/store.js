@@ -1,36 +1,21 @@
 /* =========================================================
-   データ保存まわり（公開ページ・管理ページ共通）
-   - 公開データ: js/data.js の DEFAULT_DATA
-   - 管理ページで編集した内容: このブラウザの localStorage（プレビュー）
+   データ読み込み・共通処理（公開ページ・管理ページ共通）
+   - Cloudflare 上では D1（/api/data）から読み込みます
+   - D1 が未登録・ローカルで開いた場合は js/data.js の内容を表示します
    ========================================================= */
 (function () {
-  var KEY = 'nklab_data_v1';
-
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
   var Store = {
-    KEY: KEY,
-    hasDraft: function () {
-      try { return !!localStorage.getItem(KEY); } catch (e) { return false; }
-    },
     load: function () {
-      try {
-        var raw = localStorage.getItem(KEY);
-        if (raw) return JSON.parse(raw);
-      } catch (e) { /* 読めなければ公開データを使う */ }
-      return clone(window.DEFAULT_DATA);
-    },
-    save: function (data) {
-      try { localStorage.setItem(KEY, JSON.stringify(data)); return true; }
-      catch (e) { alert('保存できませんでした（ブラウザの保存領域が使えません）'); return false; }
-    },
-    discard: function () {
-      try { localStorage.removeItem(KEY); } catch (e) {}
+      return fetch('/api/data', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { return d && d.initialized ? d : clone(window.DEFAULT_DATA); })
+        .catch(function () { return clone(window.DEFAULT_DATA); });
     },
     defaults: function () { return clone(window.DEFAULT_DATA); }
   };
 
-  /* ---- 共通ユーティリティ ---- */
   var U = {
     esc: function (s) {
       return String(s == null ? '' : s)

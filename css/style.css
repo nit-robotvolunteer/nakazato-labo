@@ -323,3 +323,7 @@ table.prof { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
   .adm-list { max-height: 40vh; }
   .tab { flex: 1 1 auto; padding: 8px 6px; font-size: 13px; }
 }
+
+.admin-note { margin: 0; padding: 6px 18px; font-size: 13px; font-weight: 700; color: #1f6b35; background: #eaf7ee; border-bottom: 1px solid #bfe3c9; }
+.toast.err { background: #b42318; }
+.btn:disabled { opacity: .55; cursor: wait; }

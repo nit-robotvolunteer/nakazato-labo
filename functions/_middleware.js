@@ -11,7 +11,7 @@
    （公開ページではこの関数は動かないので無料枠を消費しません）。
    ========================================================= */
 
-const PROTECTED = /^\/(admin(\.html)?\/?|admin\/.*|js\/admin\.js)$/;
+const PROTECTED = /^\/(admin(\.html)?\/?|admin\/.*|js\/admin\.js|api\/admin(\/.*)?)$/;
 
 function safeEqual(a, b) {
   const x = new TextEncoder().encode(a), y = new TextEncoder().encode(b);

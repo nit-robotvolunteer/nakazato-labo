@@ -4,7 +4,7 @@
    (top / news / research / events / report / links)
    ========================================================= */
 (function () {
-  var D = LabStore.load();
+  var D;
   var U = LabUtil;
   var esc = U.esc;
   var page = document.body.getAttribute('data-page') || 'top';
@@ -46,12 +46,7 @@
       return '<li><a href="' + n.href + '"' + (cur ? ' aria-current="page"' : '') + '>' + n.label + '</a></li>';
     }).join('');
 
-    var draft = LabStore.hasDraft()
-      ? '<div class="draft-bar" role="status">管理ページで編集中の内容（このブラウザだけのプレビュー）を表示しています。 <button type="button" id="discardDraft">公開中の内容に戻す</button></div>'
-      : '';
-
     document.getElementById('root').innerHTML =
-      draft +
       '<a class="skip" href="#main">本文へスキップ</a>' +
       '<div class="frame" id="top">' +
         '<header class="masthead">' +
@@ -70,12 +65,6 @@
         '</footer>' +
       '</div>';
 
-    var dd = document.getElementById('discardDraft');
-    if (dd) dd.addEventListener('click', function () {
-      if (confirm('このブラウザのプレビュー内容を破棄して、公開中の内容を表示しますか？\n（書き出していない変更は失われます）')) {
-        LabStore.discard(); location.reload();
-      }
-    });
   }
 
   /* ---------- 各パーツ ---------- */
@@ -191,5 +180,8 @@
     }
   };
 
-  (pages[page] || pages.top)();
+  LabStore.load().then(function (data) {
+    D = data;
+    (pages[page] || pages.top)();
+  });
 })();
