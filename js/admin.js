@@ -84,7 +84,23 @@
     }
   };
 
-  var state = { tab: 'news', sel: {}, draft: {} }; // draft: 未保存の新規項目
+  var state = { tab: 'news', sel: {}, draft: {}, dirty: false }; // draft: 未保存の新規項目 / dirty: 未保存の変更あり
+
+  /* 未保存の変更があるときだけ注意書きを出す */
+  function setDirty(v) {
+    state.dirty = v;
+    var el = document.getElementById('dirtyNote');
+    if (el) el.hidden = !v;
+  }
+  /* 未保存の変更があれば、移動してよいか確認する */
+  function guard() {
+    if (!state.dirty) return true;
+    if (!confirm('保存していない変更があります。\n変更を破棄して移動しますか？')) return false;
+    Object.keys(state.draft).forEach(function (k) { if (state.sel[k] === state.draft[k].id) delete state.sel[k]; });
+    state.draft = {}; setDirty(false);
+    return true;
+  }
+  window.addEventListener('beforeunload', function (e) { if (state.dirty) { e.preventDefault(); e.returnValue = ''; } });
 
   function today() {
     var d = new Date(), z = function (n) { return String(n).padStart(2, '0'); };
@@ -127,7 +143,7 @@
       '<div class="frame admin-wrap">' +
       '<header class="admin-head"><h1>🛠 ' + esc(D.site.title) + ' 管理ページ</h1><span class="sp"></span>' +
       '<a href="index.html" target="_blank" rel="noopener">公開ページを見る ↗</a></header>' +
-      '<p class="admin-note">✔ 「保存」を押すとすぐに公開ページへ反映されます。</p>' +
+      '<p class="admin-note" id="dirtyNote" role="status"' + (state.dirty ? '' : ' hidden') + '>⚠ 保存していない変更があります。「保存して公開」を押すと公開ページに反映されます。</p>' +
       '<div class="tabs" role="tablist" aria-label="編集する項目">' +
       tabs.map(function (t) { return '<button class="tab" role="tab" id="tab-' + t[0] + '" aria-controls="panel" aria-selected="' + (state.tab === t[0]) + '" tabindex="' + (state.tab === t[0] ? 0 : -1) + '" data-tab="' + t[0] + '">' + t[1] + '</button>'; }).join('') +
       '</div>' +
@@ -135,7 +151,7 @@
       '<footer class="foot"><p class="copy"><small>Copyright &copy; ' + new Date().getFullYear() + ' ' + esc(D.site.owner) + ' All Rights Reserved.</small></p></footer>' +
       '</div><div class="toast" id="toast" role="status" aria-live="polite"></div>';
 
-    function go(t) { state.tab = t; render(); document.getElementById('tab-' + t).focus(); }
+    function go(t) { if (t !== state.tab && !guard()) return; state.tab = t; render(); document.getElementById('tab-' + t).focus(); }
     document.querySelectorAll('.tab').forEach(function (b) { b.addEventListener('click', function () { go(b.dataset.tab); }); });
     document.querySelector('.tabs').addEventListener('keydown', function (e) {
       if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
@@ -175,14 +191,16 @@
       '</div><div>' + (item ? formHtml(S, item, isNew) : '<p class="empty">← 左の一覧から編集する項目を選ぶか、「＋ 新規追加」を押してください。</p>') + '</div></div>';
 
     panel.querySelector('#addBtn').addEventListener('click', function () {
-      var n = S.blank(); state.draft[key] = n; state.sel[key] = n.id; renderList(panel, key);
+      if (!guard()) return;
+      var n = S.blank(); state.draft[key] = n; state.sel[key] = n.id; renderList(panel, key); setDirty(true);
       var f = panel.querySelector('.form input, .form textarea'); if (f) f.focus();
     });
     panel.querySelectorAll('.pick').forEach(function (b) {
-      b.addEventListener('click', function () { state.sel[key] = b.dataset.id; renderList(panel, key); });
+      b.addEventListener('click', function () { if (b.dataset.id === state.sel[key] || !guard()) return; state.sel[key] = b.dataset.id; renderList(panel, key); });
     });
     panel.querySelectorAll('.mv').forEach(function (b) {
       b.addEventListener('click', function () {
+        if (!guard()) return;
         var i = +b.dataset.i, j = i + (+b.dataset.mv), a = D[key].slice();
         var t = a[i]; a[i] = a[j]; a[j] = t;
         busy(null, api('PUT', 'order/' + key, { ids: a.map(function (x) { return x.id; }) }), '並び順を保存しました')
@@ -192,6 +210,7 @@
 
     if (!item) return;
     var f = panel.querySelector('#editForm');
+    f.addEventListener('input', function () { setDirty(true); });
     f.addEventListener('submit', function (ev) {
       ev.preventDefault();
       if (!f.reportValidity()) return;
@@ -204,16 +223,17 @@
       var btn = f.querySelector('button[type=submit]');
       busy(btn, api('PUT', key + '/' + encodeURIComponent(item.id), next), isNew ? '追加して公開しました' : '保存して公開しました').then(function (r) {
         var saved = r.item;
+        setDirty(false);
         if (isNew) { arr.push(saved); delete state.draft[key]; }
         else arr[arr.indexOf(item)] = saved;
         renderList(panel, key);
       });
     });
     panel.querySelector('#delBtn').addEventListener('click', function () {
-      if (isNew) { delete state.draft[key]; delete state.sel[key]; renderList(panel, key); return; }
+      if (isNew) { delete state.draft[key]; delete state.sel[key]; setDirty(false); renderList(panel, key); return; }
       if (!confirm('「' + S.title(item) + '」を削除しますか？\n公開ページからもすぐに消えます。')) return;
       busy(null, api('DELETE', key + '/' + encodeURIComponent(item.id)), '削除しました').then(function () {
-        D[key] = arr.filter(function (x) { return x !== item; }); delete state.sel[key]; renderList(panel, key);
+        D[key] = arr.filter(function (x) { return x !== item; }); delete state.sel[key]; setDirty(false); renderList(panel, key);
       });
     });
   }
@@ -248,11 +268,12 @@
       '<p class="notice info" style="margin-top:24px">🔑 管理ページのパスワードは Cloudflare Pages の環境変数（ADMIN_USER / ADMIN_PASSWORD）で管理しています。変更は Cloudflare のダッシュボードから行い、再デプロイしてください。</p>';
 
     var form = panel.querySelector('#siteForm');
+    form.addEventListener('input', function () { setDirty(true); });
     form.addEventListener('submit', function (ev) {
       ev.preventDefault();
       var next = {};
       F.concat([['welcome']]).forEach(function (f) { next[f[0]] = form.elements[f[0]].value.trim(); });
-      busy(form.querySelector('button'), api('PUT', 'site', next), '保存して公開しました').then(function (r) { D.site = r.site; render(); });
+      busy(form.querySelector('button'), api('PUT', 'site', next), '保存して公開しました').then(function (r) { D.site = r.site; setDirty(false); render(); });
     });
   }
 
