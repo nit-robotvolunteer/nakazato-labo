@@ -291,11 +291,13 @@ table.prof { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
 .adm-grid { display: grid; grid-template-columns: minmax(220px, 320px) 1fr; gap: 18px; align-items: start; }
 .adm-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--lo); background: #fff; max-height: 70vh; overflow: auto; }
 .adm-list li { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
-.adm-list button.pick { flex: 1; text-align: left; padding: 8px 10px; font: 14px/1.5 var(--font); background: none; border: 0; cursor: pointer; color: var(--ink); }
+.adm-grid > div { min-width: 0; }
+.adm-list button.pick { flex: 1; min-width: 0; overflow-wrap: anywhere; word-break: break-word; text-align: left; padding: 8px 10px; font: 14px/1.5 var(--font); background: none; border: 0; cursor: pointer; color: var(--ink); }
 .adm-list button.pick:hover { background: #fffbe6; }
 .adm-list li.sel { background: var(--navy); }
 .adm-list li.sel button.pick { color: #fff; }
-.adm-list .mv { border: 0; background: none; cursor: pointer; padding: 6px; font-size: 12px; }
+.adm-list .mv { flex: none; min-width: 32px; min-height: 40px; border: 0; background: none; cursor: pointer; padding: 6px; font-size: 13px; }
+.adm-list .mv:disabled { opacity: .3; cursor: default; }
 .adm-list li.sel .mv { color: #fff; }
 .adm-list small { display: block; opacity: .75; }
 .adm-tools { display: flex; gap: 6px; margin: 0 0 8px; flex-wrap: wrap; }
@@ -319,12 +321,15 @@ table.prof { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
 .toast.show { opacity: 1; }
 
 @media (max-width: 720px) {
-  .adm-grid { grid-template-columns: 1fr; }
+  .adm-grid { grid-template-columns: minmax(0, 1fr); }
+  .hint-wide { display: none; }
+  .hint-narrow { display: inline; }
   .adm-list { max-height: 40vh; }
   .tab { flex: 1 1 auto; padding: 8px 6px; font-size: 13px; }
 }
 
 .admin-note { position: sticky; top: 0; z-index: 20; margin: 0; padding: 8px 18px; font-size: 13.5px; font-weight: 700; color: #7a4b00; background: #fff4c2; border-bottom: 1px solid #e0b800; }
 .admin-note[hidden] { display: none; }
+.hint-narrow { display: none; }
 .toast.err { background: #b42318; }
 .btn:disabled { opacity: .55; cursor: wait; }
