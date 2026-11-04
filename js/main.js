@@ -10,11 +10,11 @@
   var page = document.body.getAttribute('data-page') || 'top';
 
   var NAV = [
-    { id: 'top', href: 'index.html', label: 'トップ' },
-    { id: 'news', href: 'news.html', label: 'お知らせ' },
-    { id: 'research', href: 'research.html', label: '研究紹介', icon: '🔬', desc: '研究室の方針と、主な研究テーマを紹介します。' },
-    { id: 'events', href: 'events.html', label: 'イベントレポート', icon: '📷', desc: '研究室で行ったイベントの様子をレポートします。' },
-    { id: 'links', href: 'links.html', label: '関連リンク', icon: '🔗', desc: '大学公式の研究室・教員紹介ページなど。' }
+    { id: 'top', href: '/', label: 'トップ' },
+    { id: 'news', href: '/news', label: 'お知らせ' },
+    { id: 'research', href: '/research', label: '研究紹介', icon: '🔬', desc: '研究室の方針と、主な研究テーマを紹介します。' },
+    { id: 'events', href: '/events', label: 'イベントレポート', icon: '📷', desc: '研究室で行ったイベントの様子をレポートします。' },
+    { id: 'links', href: '/links', label: '関連リンク', icon: '🔗', desc: '大学公式の研究室・教員紹介ページなど。' }
   ];
 
   /* ---------- 共通パーツ ---------- */
@@ -50,7 +50,7 @@
       '<a class="skip" href="#main">本文へスキップ</a>' +
       '<div class="frame" id="top">' +
         '<header class="masthead">' +
-          '<a class="logo" href="index.html">' +
+          '<a class="logo" href="/">' +
             '<span class="univ">' + esc(s.university) + '</span>' +
             '<span class="logo-main">' + esc(s.title) + '</span>' +
             '<span class="logo-sub">' + esc(s.subtitle) + '</span>' +
@@ -82,7 +82,7 @@
   function eventRows(list) {
     if (!list.length) return '<p>レポートはまだありません。</p>';
     return '<ul class="ev-list">' + list.map(function (e) {
-      return '<li><a class="ev-item" href="report.html?id=' + encodeURIComponent(e.id) + '">' +
+      return '<li><a class="ev-item" href="/report?id=' + encodeURIComponent(e.id) + '">' +
         '<span class="ev-date"><time datetime="' + esc(e.date) + '">' + U.fmtDate(e.date) + '</time></span>' +
         '<span class="ev-main"><span class="ev-title">' + esc(e.title) + '</span>' + newBadge(e.date) +
         (e.summary ? '<span class="ev-sum">' + esc(e.summary) + '</span>' : '') + '</span>' +
@@ -100,13 +100,13 @@
       var c =
         '<h1 class="sr-only">' + esc(D.site.title) + '（' + esc(D.site.subtitle) + '）</h1>' +
         '<p class="welcome">' + esc(D.site.welcome) + '</p>' +
-        box('お知らせ', newsList(3) + '<p class="more"><a href="news.html">お知らせ一覧へ ›</a></p>', 'news') +
+        box('お知らせ', newsList(3) + '<p class="more"><a href="/news">お知らせ一覧へ ›</a></p>', 'news') +
         '<nav aria-label="各ページへのリンク"><ul class="cards">' + cards + '</ul></nav>';
       layout(c, '');
     },
 
     news: function () {
-      var c = pageHead('お知らせ', '', [{ label: 'トップ', href: 'index.html' }, { label: 'お知らせ' }]) +
+      var c = pageHead('お知らせ', '', [{ label: 'トップ', href: '/' }, { label: 'お知らせ' }]) +
         box('お知らせ一覧', newsList(0), 'newsall');
       layout(c, 'お知らせ');
     },
@@ -114,7 +114,7 @@
     research: function () {
       var toc = '<ul class="toc">' + D.research.map(function (r) { return '<li><a href="#' + esc(r.id) + '">' + esc(r.title) + '</a></li>'; }).join('') + '</ul>';
       var c =
-        pageHead('研究紹介', '', [{ label: 'トップ', href: 'index.html' }, { label: '研究紹介' }]) +
+        pageHead('研究紹介', '', [{ label: 'トップ', href: '/' }, { label: '研究紹介' }]) +
         box('研究室について', '<p>本研究室では、次世代ロボットを「人間の生活空間で、人間と協調しながら作業できるロボット」と位置づけて研究・開発を行っています。人間と同程度の大きさや動き方、人を傷つけない安全な機構・材質、人と協調するためのシステム、親しみを感じさせるデザインなどがテーマです。</p>' +
           '<p>分野としては、<strong>医療・福祉ロボット</strong>、<strong>災害救助ロボット</strong>、<strong>教育・サービス用ロボット</strong>の開発が中心です。</p>' +
           '<p class="motto"><span>研究室のモットー</span>「とにかく経験しろ」</p>' +
@@ -134,7 +134,7 @@
 
     events: function () {
       var evs = D.events.slice().sort(U.byDateDesc);
-      var c = pageHead('イベントレポート', '中里研究室で行われたイベントのレポートです。イベントを選ぶとレポートページが開きます。', [{ label: 'トップ', href: 'index.html' }, { label: 'イベントレポート' }]) +
+      var c = pageHead('イベントレポート', '中里研究室で行われたイベントのレポートです。イベントを選ぶとレポートページが開きます。', [{ label: 'トップ', href: '/' }, { label: 'イベントレポート' }]) +
         eventRows(evs);
       layout(c, 'イベントレポート');
     },
@@ -143,10 +143,10 @@
       var id = new URLSearchParams(location.search).get('id');
       var evs = D.events.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
       var i = evs.findIndex(function (e) { return e.id === id; });
-      var crumbs = [{ label: 'トップ', href: 'index.html' }, { label: 'イベントレポート', href: 'events.html' }];
+      var crumbs = [{ label: 'トップ', href: '/' }, { label: 'イベントレポート', href: '/events' }];
       if (i < 0) {
         layout(pageHead('レポートが見つかりません', 'お探しのレポートは削除されたか、URLが間違っている可能性があります。', crumbs.concat({ label: '見つかりません' })) +
-          '<p><a class="btn" href="events.html">‹ イベントレポート一覧へ</a></p>', 'ページが見つかりません');
+          '<p><a class="btn" href="/events">‹ イベントレポート一覧へ</a></p>', 'ページが見つかりません');
         return;
       }
       var e = evs[i], prev = evs[i - 1], next = evs[i + 1];
@@ -158,9 +158,9 @@
         ? '<h3 class="sub-h">写真</h3><ul class="gallery">' + imgs.map(function (u, k) { return '<li><a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" alt="' + esc(e.title) + ' の写真 ' + (k + 1) + '" loading="lazy"></a></li>'; }).join('') + '</ul>'
         : '';
       var pager = '<nav class="pager" aria-label="前後のレポート">' +
-        (prev ? '<a class="btn" href="report.html?id=' + encodeURIComponent(prev.id) + '" rel="prev">‹ 前のレポート<span class="pg-t">' + esc(prev.title) + '</span></a>' : '<span></span>') +
-        '<a class="btn" href="events.html">一覧へ戻る</a>' +
-        (next ? '<a class="btn" href="report.html?id=' + encodeURIComponent(next.id) + '" rel="next">次のレポート ›<span class="pg-t">' + esc(next.title) + '</span></a>' : '<span></span>') +
+        (prev ? '<a class="btn" href="/report?id=' + encodeURIComponent(prev.id) + '" rel="prev">‹ 前のレポート<span class="pg-t">' + esc(prev.title) + '</span></a>' : '<span></span>') +
+        '<a class="btn" href="/events">一覧へ戻る</a>' +
+        (next ? '<a class="btn" href="/report?id=' + encodeURIComponent(next.id) + '" rel="next">次のレポート ›<span class="pg-t">' + esc(next.title) + '</span></a>' : '<span></span>') +
         '</nav>';
       var c = pageHead(e.title, '', crumbs.concat({ label: e.title })) +
         '<article class="win report">' + '<div class="win-body">' + meta + '<div class="rep-body">' + U.paras(e.body) + '</div>' + gallery + '</div></article>' + pager;
@@ -174,7 +174,7 @@
           (l.desc ? '<span class="link-desc">' + esc(l.desc) + '</span>' : '') +
           '<span class="link-url">' + esc(url) + '</span></li>';
       }).join('') + '</ul>' : '<p>リンクはまだありません。</p>';
-      var c = pageHead('関連リンク', '外部サイトは新しいタブで開きます。', [{ label: 'トップ', href: 'index.html' }, { label: '関連リンク' }]) +
+      var c = pageHead('関連リンク', '外部サイトは新しいタブで開きます。', [{ label: 'トップ', href: '/' }, { label: '関連リンク' }]) +
         box('リンク集', list, 'linklist');
       layout(c, '関連リンク');
     }

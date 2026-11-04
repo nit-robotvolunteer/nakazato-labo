@@ -41,7 +41,7 @@
       fields: [
         { k: 'date', label: '日付', type: 'date', req: true },
         { k: 'text', label: '内容', type: 'text', req: true },
-        { k: 'link', label: 'リンク先（任意）', type: 'text', hint: '例: report.html?id=20260507-akiba / https://〜' }
+        { k: 'link', label: 'リンク先（任意）', type: 'text', hint: '例: /report?id=2026050701 / https://〜' }
       ],
       title: function (x) { return x.text || '（無題）'; }, sub: function (x) { return U.fmtDate(x.date); },
       blank: function () { return { id: U.uid('n'), date: today(), text: '', link: '' }; }
@@ -58,8 +58,12 @@
         { k: 'images', label: '写真のURL（1行に1つ）', type: 'lines', hint: '例: images/akiba01.jpg（サイトに置いた画像のパス）' }
       ],
       title: function (x) { return x.title || '（無題）'; }, sub: function (x) { return U.fmtDate(x.date); },
-      blank: function () { return { id: today().replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 6), date: today(), title: '', place: '', participants: '', summary: '', body: '', images: [] }; },
-      extra: function (x, isNew) { return isNew ? '' : '<p class="hint">このレポートのURL: <code>report.html?id=' + esc(x.id) + '</code> ／ <a href="report.html?id=' + encodeURIComponent(x.id) + '" target="_blank" rel="noopener">公開ページで見る ↗</a></p>'; }
+      blank: function () { return { id: 'new', date: today(), title: '', place: '', participants: '', summary: '', body: '', images: [] }; },
+      extra: function (x, isNew) {
+        return isNew
+          ? '<p class="hint">URL は保存時に「日付＋連番」で自動で決まります（例: <code>/report?id=' + esc(x.date.replace(/-/g, '')) + '01</code>）。</p>'
+          : '<p class="hint">このレポートのURL: <code>/report?id=' + esc(x.id) + '</code> ／ <a href="/report?id=' + encodeURIComponent(x.id) + '" target="_blank" rel="noopener">公開ページで見る ↗</a><br>※後から日付を変えても URL は変わりません。</p>';
+      }
     },
     research: {
       label: '研究紹介', icon: '🔬', sort: 'manual',
@@ -142,7 +146,7 @@
     root.innerHTML =
       '<div class="frame admin-wrap">' +
       '<header class="admin-head"><h1>🛠 ' + esc(D.site.title) + ' 管理ページ</h1><span class="sp"></span>' +
-      '<a href="index.html" target="_blank" rel="noopener">公開ページを見る ↗</a></header>' +
+      '<a href="/" target="_blank" rel="noopener">公開ページを見る ↗</a></header>' +
       '<p class="admin-note" id="dirtyNote" role="status"' + (state.dirty ? '' : ' hidden') + '>⚠ 保存していない変更があります。「保存して公開」を押すと公開ページに反映されます。</p>' +
       '<div class="tabs" role="tablist" aria-label="編集する項目">' +
       tabs.map(function (t) { return '<button class="tab" role="tab" id="tab-' + t[0] + '" aria-controls="panel" aria-selected="' + (state.tab === t[0]) + '" tabindex="' + (state.tab === t[0] ? 0 : -1) + '" data-tab="' + t[0] + '">' + t[1] + '</button>'; }).join('') +
@@ -172,6 +176,34 @@
     if (f) f.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   }
 
+  /* イベントIDは「YYYYMMDD＋2桁連番」（例: 2026073001） */
+  var EVENT_ID = /^\d{10}$/;
+  function nextEventId(date, list, taken) {
+    var base = String(date).replace(/-/g, ''), used = {};
+    list.forEach(function (e) { used[e.id] = 1; });
+    (taken || []).forEach(function (id) { used[id] = 1; });
+    for (var n = 1; n <= 99; n++) { var id = base + (n < 10 ? '0' : '') + n; if (!used[id]) return id; }
+    return null;
+  }
+
+  /* 古い形式のID（例: 20260730-otsukare）を新しい形式に変換し、お知らせのリンクも書き換える */
+  function migrateEventIds(btn) {
+    var old = D.events.filter(function (e) { return !EVENT_ID.test(e.id); })
+      .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    if (!old.length) return;
+    var keep = D.events.filter(function (e) { return EVENT_ID.test(e.id); }), assigned = [], map = {};
+    old.forEach(function (e) { var id = nextEventId(e.date, keep, assigned); assigned.push(id); map[e.id] = id; });
+    if (!confirm('次のように URL を変更します。よろしいですか？\n\n' + old.map(function (e) { return e.title + '\n  ' + e.id + ' → ' + map[e.id]; }).join('\n'))) return;
+
+    var data = { site: D.site, news: D.news, research: D.research, links: D.links,
+      events: D.events.map(function (e) { return Object.assign({}, e, { id: map[e.id] || e.id }); }) };
+    data.news = D.news.map(function (n) {
+      var link = String(n.link || '').replace(/^\/?report(\.html)?\?id=([\w-]+)/, function (m, h, id) { return '/report?id=' + (map[id] || id); });
+      return Object.assign({}, n, { link: link });
+    });
+    busy(btn, api('POST', 'import', data), 'URL を変換しました').then(function (r) { D = r.data; state.sel = {}; render(); });
+  }
+
   /* ---------- 一覧＋編集フォーム ---------- */
   function renderList(panel, key) {
     var S = SCHEMA[key], arr = D[key];
@@ -191,12 +223,16 @@
         (fresh ? '🆕 ' : '') + esc(S.title(x)) + (S.sub(x) ? '<small>' + esc(S.sub(x)) + '</small>' : '') + '</button>' + mv + '</li>';
     }).join('') + '</ul>' : '<p class="empty">まだありません</p>';
 
+    var needMigrate = key === 'events' && arr.some(function (e) { return !EVENT_ID.test(e.id); });
     panel.innerHTML =
+      (needMigrate ? '<div class="notice info">古い形式の URL（例: <code>/report?id=20260730-otsukare</code>）のレポートがあります。短い形式（例: <code>/report?id=2026073001</code>）に変換できます。お知らせのリンクも自動で書き換えます。<div class="row" style="margin-top:8px"><button class="btn primary" type="button" id="migrateBtn">URL を短い形式に変換する</button></div></div>' : '') +
       '<div class="adm-grid"><div>' +
       '<div class="adm-tools"><button class="btn primary" type="button" id="addBtn"' + (draft ? ' disabled' : '') + '>＋ 新規追加</button></div>' + list +
       (S.sort === 'date' ? '<p class="hint">※日付の新しい順に自動で並びます</p>' : '<p class="hint">※▲▼で表示順を変えられます</p>') +
       '</div><div>' + (item ? formHtml(S, item, isNew) : '<p class="empty"><span class="hint-wide">← 左</span><span class="hint-narrow">↑ 上</span>の一覧から編集する項目を選ぶか、「＋ 新規追加」を押してください。</p>') + '</div></div>';
 
+    var mb = panel.querySelector('#migrateBtn');
+    if (mb) mb.addEventListener('click', function () { if (guard()) migrateEventIds(mb); });
     panel.querySelector('#addBtn').addEventListener('click', function () {
       if (!guard()) return;
       var n = S.blank(); state.draft[key] = n; state.sel[key] = n.id; renderList(panel, key); setDirty(true); scrollToForm(panel);
@@ -227,11 +263,16 @@
         next[fd.k] = fd.type === 'lines' ? v.split('\n').map(function (s) { return s.trim(); }).filter(Boolean) : v.trim();
       });
       if (S.sort === 'manual' && isNew) next.sort = arr.length;
+      var saveId = item.id;
+      if (key === 'events' && isNew) {
+        saveId = nextEventId(next.date, arr);
+        if (!saveId) { toast('同じ日付のレポートが多すぎます（1日99件まで）', true); return; }
+      }
       var btn = f.querySelector('button[type=submit]');
-      busy(btn, api('PUT', key + '/' + encodeURIComponent(item.id), next), isNew ? '追加して公開しました' : '保存して公開しました').then(function (r) {
+      busy(btn, api('PUT', key + '/' + encodeURIComponent(saveId), next), isNew ? '追加して公開しました' : '保存して公開しました').then(function (r) {
         var saved = r.item;
         setDirty(false);
-        if (isNew) { arr.push(saved); delete state.draft[key]; }
+        if (isNew) { arr.push(saved); delete state.draft[key]; state.sel[key] = saved.id; }
         else arr[arr.indexOf(item)] = saved;
         renderList(panel, key);
       });
