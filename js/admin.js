@@ -165,6 +165,13 @@
     else renderBackup(panel);
   }
 
+  /* スマホ（1列表示）のときは、選んだ項目のフォームまでスクロール */
+  function scrollToForm(panel) {
+    if (!window.matchMedia('(max-width: 720px)').matches) return;
+    var f = panel.querySelector('#editForm');
+    if (f) f.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  }
+
   /* ---------- 一覧＋編集フォーム ---------- */
   function renderList(panel, key) {
     var S = SCHEMA[key], arr = D[key];
@@ -188,15 +195,15 @@
       '<div class="adm-grid"><div>' +
       '<div class="adm-tools"><button class="btn primary" type="button" id="addBtn"' + (draft ? ' disabled' : '') + '>＋ 新規追加</button></div>' + list +
       (S.sort === 'date' ? '<p class="hint">※日付の新しい順に自動で並びます</p>' : '<p class="hint">※▲▼で表示順を変えられます</p>') +
-      '</div><div>' + (item ? formHtml(S, item, isNew) : '<p class="empty">← 左の一覧から編集する項目を選ぶか、「＋ 新規追加」を押してください。</p>') + '</div></div>';
+      '</div><div>' + (item ? formHtml(S, item, isNew) : '<p class="empty"><span class="hint-wide">← 左</span><span class="hint-narrow">↑ 上</span>の一覧から編集する項目を選ぶか、「＋ 新規追加」を押してください。</p>') + '</div></div>';
 
     panel.querySelector('#addBtn').addEventListener('click', function () {
       if (!guard()) return;
-      var n = S.blank(); state.draft[key] = n; state.sel[key] = n.id; renderList(panel, key); setDirty(true);
+      var n = S.blank(); state.draft[key] = n; state.sel[key] = n.id; renderList(panel, key); setDirty(true); scrollToForm(panel);
       var f = panel.querySelector('.form input, .form textarea'); if (f) f.focus();
     });
     panel.querySelectorAll('.pick').forEach(function (b) {
-      b.addEventListener('click', function () { if (b.dataset.id === state.sel[key] || !guard()) return; state.sel[key] = b.dataset.id; renderList(panel, key); });
+      b.addEventListener('click', function () { if (b.dataset.id === state.sel[key] || !guard()) return; state.sel[key] = b.dataset.id; renderList(panel, key); scrollToForm(panel); });
     });
     panel.querySelectorAll('.mv').forEach(function (b) {
       b.addEventListener('click', function () {
